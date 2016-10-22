@@ -1,0 +1,487 @@
+****************** Spark *************************************
+# launch the spark in CDH
+$ spark-shell ENTER 
+#SparkContext 
+#HiveContext 
+#pyspark 
+#spark-sql (only in latest version) 
+
+# Creating table using hive context 
+# exit from spark shell
+# use hive-site.xml file 
+$ sudo ln -s /etc/hive/conf/hive-site.xml /etc/spark/conf/hive-site.xml 
+# validate the soft link by running ls -ltr /etc/spark/conf/
+# Data frames from Spark 1.3.0 (this concept not available in previous versions)
+$ hadoop version 
+# Spark 1.3.0 data sources can connect to JDBC to other databases,this is not possible in 1.2.0/1.2.1
+
+********** for cca 175 , spark 1.2.1 config **********
+
+# download the spark 1.2.1 for Hadoop > 2.4 and install in VM 
+$ tar xzf spark-download file.tar 
+$ which spark-shell 
+# run the spark-shell from the current downloaded version (1.2.1) of spark 
+$ bin/spark-shell --> so we can spark 1.2.1
+
+# Here, spark is running in local mode without knowing hadoop,For that we have to config 
+
+# download the spark 1.2.1. into VM and unzip(We have to use this Spark 1.2.1 version is downloaded from Apache not the one which came along with VM)
+$ tar xzf <spark-file-name>.tgz
+# one it is installed, it doesnot know the exisitng VM config.So, we have to config 
+# if we run spark shell directly, it will run from the existing 1.3.0 bin directly. So, we have to go our latest version 1.2.1 bin folder and run 
+
+[cloudera@quickstart spark 1.2.1-bin-hadoop2.4] $ bin/spark-shell.
+# start spark with $spark-shell 
+
+scala> sc.textFile("/user/cloudera/sqoop_import/departments").count().forEach(println) #this will fail because it try to read file from local file system without knowing the hadoop config files. For that, we have to config the hadoop config files.
+
+********* there is a issue with spark 1.3.0 *********
+ Video 29 
+$ bin/pyspark --master local (local is spark native mode resource management component as part of spark itself)
+$ pyspark --> this will launch pyspark in YARN. YARN is resource management soft component in Hadoop 
+# if you would like to know which mode is running, go to resource manager URL which runs on port 8088 
+# CTRL+D to exit 
+# In pysparl, both sqlContext & HiveContext are in same packacage 
+>>> from pyspark.sql import SQLContext 
+>>> from pyspark.sql import HiveContext 
+>>> sqlContext = HiveContext(sc) # set sqlcontext itself 
+>>> depts = sqlContext.sql("select * from departments") # Here depts is RDD
+>>> for rec in depts.collect():
+     print(rec)
+# ERROR- RDD not created
+
+Focus on SQLContext & HiveContext - IMP 
+ 
+$ sudo find / -name "mysql-connector*.jar" # to find the sql connector 
+
+********* connecting remote database using JDBC URL *****************
+
+>>> os.environ['SPARK_CLASSPATH'] = "/usr/share/java/mysql-connector-java.jar"
+>>> from pyspark.sql import SQLContext 
+>>> sqlContext = SQLContext(sc)
+>>> jdbcurl = "jdbc:mysql://quickstart.cloudera:3306/retail_db?user=retail_dba&password=cloudera"
+# if the port number is custom port number other than 3306, we have to specify that port number 
+>>> df = sqlContext(source="jdbc", url=jdbcurl, dbtable="departments")
+
+for rec in df.collect():
+  print(rec)
+
+df.count()
+
+# spark is lazy evaluation, unless some action done, it will not execute 
+ERROR
+
+******************************Video 30 - Submitting pyspark applications or python script as a job*****************************************
+
+# developing simple scala based applications for spark 
+# save this to a file with py extension 
+
+#python based application for spark 
+# open vi savefile.py & copy the below script. When we run the script as a job, it need SparkConf
+# basically this script create RDD (dataRDD) with HDFS data and save as a text file
+
+------start of script--------
+
+from pyspark import SparkContext, SparkConf 
+conf = SparkConf().setAppName("pyspark")
+sc = SparkContext(conf=conf)
+dataRDD = sc.textFile("/user/cloudera/sqoop_import/departments")
+for line in dataRDD.collect():
+    print(line)
+dataRDD.saveAsTextFile("/user/cloudera/pyspark/departmentsTesting")
+
+-----end of script-----------
+
+$ spark-submit --master yarn savefile.py
+
+**************** Load data from HDFS and storing results back to HDFS using Spark ********************
+
+	1. Read the data from HDFS 
+        2. Read the data from local file 
+        3. Read the data using namenode fully qualified path 
+
+# Launch pyspark for 1.2.1. It will launch in YARN mode not in local
+$ bin/pyspark 
+# after the pyspark launched,we have to import the spark context if required
+
+1 :
+>>> sc.textFile("/user/cloudera/sqoop_import/departments") --> with sc.textFile command, READ the data from /user/cloudera/sqoop_import/departments (of HDFS)
+>>> data = sc.textFile("/user/cloudera/sqoop_import/departments") --> If we want to navigate to data, we have to assign to a variable called data(in this case)
+>>> for i in data.collect():
+...  print(i)
+# indentation is important in python 
+RDD having custom python method, it has many collections (RDD is lazy evaluation)
+
+2:
+>>> data = sc.textFile("file:///home/cloudera/departments.java") --> In this case, read the data from local file(/home/cloudera/departments.java)
+
+# /user/cloudera/sqoop_import/departments = HDFS path 
+$ hadoop fs -ls /user/cloudera/sqoop_import/departments
+$ hadoop fs -ls hdfs://quickstart.cloudera:8020/user/cloudera/sqoop_import/departments --> fully qualified path with namenode IP address
+# name node IP address. For port number, we have to go /etc/hadoop/conf/core-site.xml file we can get port number
+$ view /etc/hadoop/conf/core-site.xml --> to get the default name node port number (by default 8020)
+
+3:
+# read the data with name node fully qualified path below
+>>> data = sc.textFile("hdfs://quickstart.cloudera:8020/user/cloudera/sqoop_import/departments")
+>>> for i in data.collect():
+     print(i)
+
+##### When we use sc.textFile, spark will read each line as a record.
+
+*********************** Reading & saving the sequence file format **********************************
+Video 32
+
+# Load data from HDFS and storing results back to HDFS using Spark from pyspark import SparkContext 
+
+# read the data from HDFS path 
+>>> dataRDD = sc.textFile("/user/cloudera/sqoop_import/departments")
+>>> for line in dataRDD.collect():
+   print(line)
+>>> print(dataRDD.count())
+
+#saveAsTestFile
+>>> dataRDD.saveAsTextFile("/user/cloudera/pyspark/departments")
+
+dataRDD output:
+2,Fitness
+3,Footwear
+4,Apparel
+5,Golf
+6,Outdoors
+7,Fan Shop
+
+>>> for i in dataRDD.map(lambda x: tuple(x.split(",",1))).collect():
+    print(i)
+# output
+(u'2', u'Fitness')
+(u'3', u'Footwear')
+(u'4', u'Apparel')
+(u'5', u'Golf')
+(u'6', u'Outdoors')
+(u'7', u'Fan Shop')
+
+#saveAsSequenceFile
+dataRDD.map(lambda x: (None, x)).saveAsSequenceFile("/user/cloudera/pyspark/departmentsSeq")
+>>> dataRDD.map(lambda x: tuple(x.split(",",1))).saveAsSequenceFile("/user/cloudera/pyspark/departmentsSeq")
+
+#validate the data.Usually sequence file will be bigger than the original file(size) since sequnece file maintains the metadata in the form of key,value pairs(tuples)
+$ hadoop fs -ls /user/cloudera/sqoop_import/departments*
+$ hadoop fs -ls /user/cloudera/pyspark/departmentsSeq
+
+#reading sequence file
+data = sc.sequenceFile("/user/cloudera/pyspark/departmentsSeq")
+
+haadoop map reduce development using java - Key value types
+
+# many other input & output file formats in HDFS. Write into any output HDFS format, function saveAsNewAPIHadoopFile. If you use saveAsSequenceFile,it can understand 
+>>>  path="/user/cloudera/pyspark/departmentsSeq"
+
+>>> dataRDD.map(lambda x: tuple(x.split(",",1))).saveAsNewAPIHadoopFile(path,"org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",keyClass="org.apache.hadoop.io.IntWritable",valueClass="org.apache.hadoop.io.Text")
+
+# validate the data
+>>> data =sc.sequenceFile("/user/cloudera/pyspark/departmentsSeq", "org.apache.hadoop.io.IntWritable", "org.apache.hadoop.io.Text")
+
+# ERROR - saveAsNewAPIHadoopFile - did not work
+
+
+Sequence file is maintain the metadata of each key & value.
+transformations & actions (agg & joins)
+
+####     How split() function works: ############3
+str.split(",")
+['Hello', 'world', 'how', 'are', 'you']
+>>> str.split(",")[0]
+'Hello'
+>>> str.split(",")[1]
+'world'
+>>> str.split(",",1)
+['Hello', 'world,how,are,you']
+>>> str.split(",",21)
+['Hello', 'world', 'how', 'are', 'you']
+>>> str.split(",",2)
+['Hello', 'world', 'how,are,you']
+>>> str.split(",", 2)
+['Hello', 'world', 'how,are,you']
+
+************************** video 33 ************************************************
+
+reading data from HDFS using Hive Context 
+reading data from from JSON file
+
+>>> from pyspark.sql import HiveContext 
+>>> sqlContext = HiveContext(sc) 
+>>> data = sqlContext.sql("select * from departments") # this is running query on hive table departments. 
+>>> for i in data.collect():
+    print(i) 
+
+>>> for i in data.collect():
+    print(i.department_id)
+#output 
+2
+3
+4
+5
+6
+
+>>> for i in data.collect():
+    print(i.department_name)
+#output 
+Fitness
+Footwear
+Apparel
+Golf
+Outdoors
+Fan Shop
+
+# Before running this query, we have to check 2 things.
+1.Check if this table(departments) exist or not
+2.Whether we have copied hive-site.xml or softlink from /etc/hive/conf/hive-site.xml to /etc/spark/conf/hive-site.xml using the correct version of spark
+
+ERROR --- In my case, i dont have departments table in hive. We have to import departments table into hive before
+
+>>> data = sqlContext.sql("select * from sqoop_import.departments")
+
+ ERROR --- the above stmt also throws an error since sqoop_import.departements not availlable in Hive
+
+>>> data = sqlContext.sql("create table departmentsTest as select * from departments")
+
+# Read data from JSON file
+
+Step1: create a json file 
+$ vi departments.json
+{"department_id":2, "department_name":"Fitness"}
+{"department_id":3, "department_name":"Footwear"}
+{"department_id":4, "department_name":"Apparel"}
+{"department_id":5, "department_name":"Golf"}
+ESC :wq!
+
+create a folder in hadoop fs -mkdir -p /user/cloudera/pyspark 
+hadoop fs -put -f departments.json /user/cloudera/pyspark 
+# json file saved into HDFS 
+>>> from pyspark import SQLContext
+>>> sqlContext = SQLContext(sc)
+>>> departmentsJson = sqlContext.jsonFile("/user/cloudera/pyspark/departments.json")
+>>> departmentsJson.registerTempTable("djson") # we have to create temp table since we are not using hive context (but we use SQLContext)
+>>> sqlContext.sql("select * from djson") 
+>>> for i in sqlContext.sql("select * from djson").collect():
+     print(i)
+#output
+Row(department_id=2, department_name=u'Fitness')
+Row(department_id=3, department_name=u'Footwear')s
+Row(department_id=4, department_name=u'Apparel')
+Row(department_id=5, department_name=u'Golf')
+
+#Writing data in JSON format 
+>>> sqlContext.sql("select * from djson").toJSON().saveAsTextFile("/user/cloudera/pyspark/departmentsJson")
+# validate the data in HDFS 
+$ hadoop fs -cat /user/cloudera/pyspark/departmentsJson/part*
+#output
+{"department_id":2,"department_name":"Fitness"}
+{"department_id":3,"department_name":"Footwear"}
+{"department_id":4,"department_name":"Apparel"}
+{"department_id":5,"department_name":"Golf"}
+
+
+### watch the hadoop file formats #########
+
+
+
+*****************   Video 34 *****************************
+flatMap
+map
+reduceByKey
+
+---Text used for wordcount.txt
+Hello world how are you?
+I am fine and how about you.
+Let us write the word count program using pyspark - python on spark
+
+
+$ vi wordcount.txt 
+$ hadoop fs -put /user/cloudera
+
+>>> data = sc.textFile("/user/cloudera/wordcount.txt")    #here 'data' is RDD
+
+>>> dataFlatMap = data.flatMap(lambda x: x.split(" "))
+>>> for i in dataFlatMap.collect():
+   print(i)
+
+#OUTPUT
+
+Hello
+world
+how
+are
+you?
+I
+am
+fine
+and
+how
+about
+you.
+Let
+us
+write
+the
+word
+count
+program
+using
+pyspark
+-
+python
+on
+spark
+
+>>> dataMap = dataFlatMap.map(lambda x:(x, 1))    #map will only get one record from RDD. Here, x is key and 1 will be incremental
+>>> for i in dataMap.collect():
+    print(i)
+
+#OUTPUT 
+
+(u'Hello', 1)
+(u'world', 1)
+(u'how', 1)
+(u'are', 1)
+(u'you?', 1)
+(u'I', 1)
+(u'am', 1)
+(u'fine', 1)
+(u'and', 1)
+(u'how', 1)
+(u'about', 1)
+(u'you.', 1)
+(u'Let', 1)
+(u'us', 1)
+(u'write', 1)
+(u'the', 1)
+(u'word', 1)
+(u'count', 1)
+(u'program', 1)
+(u'using', 1)
+(u'pyspark', 1)
+(u'-', 1)
+(u'python', 1)
+(u'on', 1)
+(u'spark', 1)
+(u'', 1)
+
+>>> WordCount = dataMap.reduceByKey(lambda x,y:x+y)  # x, y are the values for each of the keys
+>>> for i in WordCount.collect():
+      print(i)
+
+
+#OUTPUT      (observe word "how" appear 2 times)
+
+(u'and', 1)
+(u'you?', 1)
+(u'about', 1)
+(u'word', 1)
+(u'', 1)
+(u'python', 1)
+(u'am', 1)
+(u'-', 1)
+(u'count', 1)
+(u'us', 1)
+(u'write', 1)
+(u'I', 1)
+(u'Let', 1)
+(u'spark', 1)
+(u'fine', 1)
+(u'the', 1)
+(u'you.', 1)
+(u'pyspark', 1)
+(u'how', 2)
+(u'program', 1)
+(u'are', 1)
+(u'using', 1)
+(u'world', 1)
+(u'on', 1)
+(u'Hello', 1)
+
+>>> for i in WordCount.take(5):
+...   print(i)
+
+SUMMARY START:
+Develop word count program
+Create a file and type few lines and save it as wordcount.txt and copy to HDFS to /user/cloudera/wordcount.txt
+
+data = sc.textFile("/user/cloudera/wordcount.txt")
+dataFlatMap = data.flatMap(lambda x: x.split(" "))
+dataMap = dataFlatMap.map(lambda x:(x, 1))
+dataReduceByKey = dataMap.reduceByKey(lambda x,y:x+y)
+
+dataReduceByKey.saveAsTextFile("/user/cloudera/wordcountoutput")
+
+for i in dataReduceByKey.collect():
+   print(i)
+
+SUMMARY END:
+
+************* Video 35 **************
+Mapper, Reducer , Combiner 
+
+Executor 
+Tasks 
+Job submits to it will submit to d
+Shuffle process between map & reducer phases 
+Data will be partitioned into multiple hash buckets. Hash bucket is a given string or numeric value like below:
+a --> 1 - 100 
+b --> 1 - 100
+c --> 1 - 100
+
+************  video 36 - Joining data sets *****************
+
+Join disperate datasets together using Spark 
+Typically inner join 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+RDD transformations:
+map
+flatmap
+mappartitions
+groupByKey
+reductByKey 
+aggregateByKey
+sortByKey
+
+
+RDD Actions: Which actually perform 
+take
+
+
+
+
+
+
+
