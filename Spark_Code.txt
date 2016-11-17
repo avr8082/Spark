@@ -1,6 +1,5 @@
 ****************** Spark *************************************
-# launch the spark in CDH
-$ spark-shell ENTER 
+$ spark-shell 
 #SparkContext 
 #HiveContext 
 #pyspark 
